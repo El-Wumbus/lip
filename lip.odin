@@ -22,9 +22,9 @@ Flags :: struct {
 
 map_input :: proc(
 	input: ^string,
+	output: os.Handle,
 	opts: ^Flags,
 ) -> (
-	output: string,
 	error: mem.Allocator_Error = nil,
 ) {
 	begin := strings.trim_space(opts.begin)
@@ -39,30 +39,26 @@ map_input :: proc(
 		comment = strings.to_lower(comment)
 	}
 
-	builder: strings.Builder
-	strings.builder_init(&builder)
-	defer strings.builder_destroy(&builder)
-
 	code_section := false
 	for line in strings.split_lines_iterator(input) {
 		if code_section {
 			if strings.trim_space(line) == end {
 				if !select_code {
-					fmt.sbprintfln(&builder, "%s %s", comment, line)
+					fmt.fprintfln(output, "%s %s", comment, line)
 				} else {
-					fmt.sbprint(&builder, "\n")
+					fmt.fprint(output, "\n")
 				}
 				code_section = false
 			} else {
-				fmt.sbprintln(&builder, line)
+				fmt.fprintln(output, line)
 			}
 		} else {
 			// C allows single-line comments to be extended by backslashes, the compiler may complain about this.
 			if !select_code {
 				if avoid_end_bs && strings.ends_with(strings.trim_right_space(line), "\\") {
-					fmt.sbprintfln(&builder, "%s %s", comment, line[:len(line) - 1])
+					fmt.fprintfln(output, "%s %s", comment, line[:len(line) - 1])
 				} else {
-					fmt.sbprintfln(&builder, "%s %s", comment, line)
+					fmt.fprintfln(output, "%s %s", comment, line)
 				}
 			}
 			if strings.trim_space(line) == begin {
@@ -70,7 +66,7 @@ map_input :: proc(
 			}
 		}
 	}
-	output = strings.clone_from(strings.to_string(builder)) or_return
+
 	return
 }
 
@@ -79,8 +75,13 @@ main :: proc() {
 	flags.parse_or_exit(&flgs, os.args, .Unix)
 
 	log_level := flgs.log_level if flgs.log_level != nil else .Debug
-	input := flgs.input if flgs.input != os.INVALID_HANDLE else os.stdin
-	output := flgs.output if flgs.output != os.INVALID_HANDLE else os.stdout
+
+	// core:flags has incorrectly sets os.Handle values to 0 by defualt
+	// (THE stdin!!!). It should be setting it to os.INVALID_HANDLE instead.
+	// Odin does not have default values inside structures, so this is the 
+	// workaround.
+	input := os.stdin if flgs.input == os.INVALID_HANDLE else flgs.input
+	output := os.stdout if flgs.output == 0 || flgs.output == os.INVALID_HANDLE else flgs.output
 
 	// Log to stderr as to not taint any piped output
 	context.logger = log.create_file_logger(
@@ -96,11 +97,8 @@ main :: proc() {
 	}
 	text := string(data)
 
-	out_text, terr := map_input(&text, &flgs)
-	if terr != nil {
+	if err := map_input(&text, output, &flgs); err != nil {
 		fmt.eprintfln("Error: %s", err)
 		os.exit(1)
 	}
-
-	fmt.fprint(output, out_text)
 }
