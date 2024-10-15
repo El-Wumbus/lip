@@ -1,16 +1,16 @@
 package main
 
-import "base:runtime"
-import "core:flags"
+import fp "core:flags"
 import "core:fmt"
 import "core:log"
 import "core:mem"
 import "core:os"
+import "base:runtime"
 import "core:strings"
 
 Flags :: struct {
 	input:           os.Handle `usage:"Provide an input file, else stdin" args:"file=r"`,
-	output:          os.Handle `usage:"Provide an output file, else stdout" args:"file=cw"`,
+	output:          os.Handle `usage:"Provide an output file, else stdout" args:"file=cwt"`,
 	log_level:       runtime.Logger_Level `usage:"How verbose the logging should be"`,
 	begin:           string `usage:"Starting delimiter for code blocks" args:"required"`,
 	end:             string `usage:"The ending delimiter for code blocks" args:"required"`,
@@ -33,7 +33,8 @@ map_input :: proc(
 	select_code := opts.select_code
 	avoid_end_bs := opts.avoid_ending_bs
 	case_sensitive := opts.case_sensitive
-	if !case_sensitive {
+
+    if !case_sensitive {
 		begin = strings.to_lower(begin)
 		end = strings.to_lower(end)
 		comment = strings.to_lower(comment)
@@ -72,7 +73,7 @@ map_input :: proc(
 
 main :: proc() {
 	flgs: Flags
-	flags.parse_or_exit(&flgs, os.args, .Unix)
+	fp.parse_or_exit(&flgs, os.args, .Unix)
 
 	log_level := flgs.log_level if flgs.log_level != nil else .Debug
 
